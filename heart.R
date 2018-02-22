@@ -125,9 +125,10 @@ heartNew %>%
 library(caret)
 cfinal <- 14
 # 将数据集切成5等分
-folds <- createFolds(y = heartNew[, 15], k = 5)
+folds <- createFolds(y = heartNew[, 'disease'], k = 5)
 # delete disease.num variable
-heartNew1 <- heartNew %>% select(-disease.num)
+heartNew1 <- heartNew %>% 
+  select(-disease.num)
 # 4个为训练数据集
 traindata <- heartNew1[-folds[[1]], ]
 # 测试集
