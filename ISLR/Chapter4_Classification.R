@@ -117,4 +117,55 @@ knn.pred.3k <- knn(train.x, test.x, train.dir, k = 3)
 table(knn.pred.3k, Smarket.2005$Direction)
 mean(knn.pred.3k == Smarket.2005$Direction)
 
-## 大篷车保险数据
+
+# 大篷车保险数据KNN --------------------------------------------------------------
+
+glimpse(Caravan)
+table(Caravan$Purchase) %>% prop.table()
+# 标化数据
+Caravan.std <- scale(Caravan[, -86])
+data.class(Caravan.std)
+# 前1000个为测试集
+test <- 1 : 1000
+train.x <- Caravan.std[-test, ]
+test.x <- Caravan.std[test, ]
+train.y <- Caravan$Purchase[-test]
+test.y <- Caravan$Purchase[test]
+set.seed(1)
+knn.pred.car <- knn(train.x, test.x, train.y, k = 1)
+# 预测情况
+# 准确率
+mean(test.y == knn.pred.car)
+mean(knn.pred.car == 'Yes')
+table(knn.pred.car, test.y) ## 预测了9/77购买
+# 购买占比例
+mean(test.y == 'Yes')
+
+## 当k = 3
+knn.pred.car <- knn(train.x, test.x, train.y, k = 3)
+# 预测情况
+# 准确率
+mean(test.y == knn.pred.car)
+mean(knn.pred.car == 'Yes')
+table(knn.pred.car, test.y) ## 预测了5/26购买
+
+## 当k = 5
+knn.pred.car <- knn(train.x, test.x, train.y, k = 5)
+# 预测情况
+# 准确率
+mean(test.y == knn.pred.car)
+mean(knn.pred.car == 'Yes')
+table(knn.pred.car, test.y) ## 预测了4/15购买
+
+# logistic ----------------------------------------------------------------
+
+glm.fit.car <- glm(Purchase ~ .,data = Caravan, family =binomial, subset = -test)
+glm.fit.car.probs <- predict(glm.fit.car, Caravan[test, ], type = 'response')
+glm.pred.car <- rep('No', 1000)
+glm.pred.car[glm.fit.car.probs > .5] <- 'Yes'
+table(glm.pred.car, test.y)
+
+# 阈值改为.25
+glm.pred.car[glm.fit.car.probs > .25] <- 'Yes'
+# 预测情况
+table(glm.pred.car, test.y) ## 11/33
