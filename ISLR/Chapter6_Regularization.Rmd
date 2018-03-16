@@ -1,0 +1,194 @@
+---
+title: "模型选择"
+output: html_notebook
+---
+
+# 最优子集选择、向前向后选择，验证集和交叉验证法。
+
+```{r loading packages}
+library(ISLR)
+library(leaps)
+library(magrittr)
+```
+
+```{r}
+names(Hitters)
+dim(Hitters)
+```
+
+```{r}
+head(Hitters)
+```
+
+```{r}
+sum(is.na(Hitters$Salary))
+```
+
+删除缺失
+```{r}
+Hitters <- na.omit(Hitters)
+dim(Hitters)
+```
+
+`leaps`包中`regsubset()`函数可实现最优预测变量子集的筛选
+```{r}
+regfit.full <- regsubsets(Salary ~ ., data = Hitters, nvmax = 19)
+reg.summary <- summary(regfit.full)
+reg.summary
+```
+
+```{r}
+names(reg.summary)
+reg.summary$adjr2
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(reg.summary$rss, xlab = 'Number of Variables', ylab = 'RSS', type = 'l')
+plot(reg.summary$adjr2, xlab = 'Number of Variables', ylab = 'Adjusted Rsq', type = 'l')
+# 标出最大值对应的位置
+points(11, reg.summary$adjr2[which.max(reg.summary$adjr2)], col = 'red', pch = 20)
+```
+
+内置plot命令
+```{r}
+plot(regfit.full, scale = 'adjr2')
+plot(regfit.full, scale = 'bic')
+
+```
+
+提取参数
+```{r}
+coef(regfit.full, 6)
+```
+
+## 向前逐步选择和向后逐步选择
+```{r}
+regfit.fwd <- regsubsets(Salary ~ ., data = Hitters, nvmax = 19, method = 'forward')
+summary(regfit.fwd)
+```
+最优单变量只包含CRBI。
+
+```{r}
+regfit.bwd <- regsubsets(Salary ~ ., data = Hitters, nvmax = 19, method = 'backward')
+summary(regfit.bwd)
+```
+
+```{r}
+coef(regfit.full, 7)
+coef(regfit.fwd, 7)
+coef(regfit.bwd, 7)
+```
+
+7变量选择是不同的。
+
+## 使用验证集方法
+```{r}
+set.seed(1)
+train <- sample(c(TRUE, FALSE), nrow(Hitters), replace = TRUE)
+test <- !train
+```
+
+在训练集上完成子集选择
+```{r}
+regfit.best <- regsubsets(Salary ~ ., data = Hitters[train, ], nvmax = 19)
+```
+
+看看测试集误差，先生成一个回归设计矩阵
+```{r}
+test.mat <- model.matrix(Salary ~ ., data = Hitters[test, ])
+test.mat %>% str()
+```
+
+```{r}
+val.errors <- rep(NA, 19)
+for (i in 1 : 19) {
+  coefi <- coef(regfit.best, i)
+  pred <- test.mat[, names(coefi)] %*% coefi
+  val.errors[i] <- mean((Hitters$Salary[test] - pred)^2)
+}
+val.errors
+which.min(val.errors)
+```
+
+```{r}
+plot(sqrt(val.errors), ylab = 'Root MSE', ylim = c(370, 480), pch = 19)
+```
+
+
+```{r}
+coef(regfit.best, 10)
+```
+
+再对整个数据集选择10个变量的模型
+```{r}
+coef(regsubsets(Salary ~ ., data = Hitters, nvmax = 19), 10)
+```
+
+
+## 使用交叉验证
+定义一个向量将数据集中的每个观测归为k=10折中的某一折
+```{r}
+k <- 10
+set.seed(1)
+folds <- sample(1 : k, nrow(Hitters), replace = TRUE)
+cv.errors <- matrix(nrow = k, ncol = 19, dimnames = list(NULL, paste(1 : 19)) )
+cv.errors
+```
+
+在第j折中，j折中的观测作为测试集，其他的9折作为训练集。，计算在测试集中的测试误差。
+
+定义预测函数
+```{r}
+predict.regsubsets <- function(object, newdata, id, ...) {
+  form <- as.formula(object$call[[2]])
+  mat <- model.matrix(form, newdata)
+  coefi <- coef(object, id = id)
+  xvar <- names(coefi)
+  mat[, xvar] %*% coefi
+}
+```
+
+```{r}
+for (j in 1 : k) {
+  best.fit <- regsubsets(Salary ~ ., data = Hitters[folds != j, ], nvmax = 19)
+  for (i in 1 : 19) {
+    pred <- predict.regsubsets(best.fit, newdata = Hitters[folds == j, ], id =i)
+    cv.errors[j, i] <- mean((Hitters$Salary[folds == j] - pred)^2)
+  }
+}
+```
+
+```{r}
+cv.errors
+```
+
+列平均
+```{r}
+cv.errors.mean <- apply(cv.errors, 2, mean)
+cv.errors.mean
+```
+
+```{r}
+plot(cv.errors.mean, type = 'b')
+points(which.min(cv.errors.mean), cv.errors.mean[which.min(cv.errors.mean)], col = 'red')
+```
+
+选择了`r which.min(cv.errors.mean)`个变量模型。
+
+使用全部数据或者11个变量模型参数：
+```{r}
+coef(regsubsets(Salary ~ ., data = Hitters, nvmax = 19), 11)
+```
+
+
+# 岭回归和lasso
+```{r}
+library(glmnet)
+```
+
+```{r}
+grid <- 10 ^ seq(10, -2, length = 100)
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = grid) 
+```
+
