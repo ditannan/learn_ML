@@ -3,6 +3,12 @@ title: "模型选择"
 output: html_notebook
 ---
 
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(comment = '#>')
+Sys.setlocale('LC_ALL','C')
+```
+
+
 # 最优子集选择、向前向后选择，验证集和交叉验证法。
 
 ```{r loading packages}
@@ -187,8 +193,224 @@ coef(regsubsets(Salary ~ ., data = Hitters, nvmax = 19), 11)
 library(glmnet)
 ```
 
+构造回归设计矩阵：
 ```{r}
+x <- model.matrix(Salary ~ ., data = Hitters)[, -1]
+y <- Hitters$Salary
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 grid <- 10 ^ seq(10, -2, length = 100)
-ridge.mod <- glmnet(x, y, alpha = 0, lambda = grid) 
+# alpha = 0, 岭回归
+ridge.mod <- glmnet(x, y, alpha = 0) 
+```
+glmnet 函数默认设置下将所有的变量进行了标准化，使用`standardize = FALSE`可关闭该设置。参数$\lambda$每个值对应岭回归的系数向量，可通过函数`coef()`提取系数矩阵。
+```{r}
+dim(coef(ridge.mod))
+```
+
+```{r}
+ridge.mod$lambda
+```
+
+$\lambda$ = `r ridge.mod$lambda[50]`时系数估计。
+```{r}
+coef(ridge.mod)[, 50]
+```
+
+可通过`predict()`函数获得新的$s=\lambda$对应的岭回归系数：
+```{r}
+predict(ridge.mod, s = ridge.mod$lambda[50], type = 'coefficients')[1 : 20,]
+```
+
+可以看到和上面结果是一样的。
+```{r}
+plot(ridge.mod, xvar = 'lambda', label = TRUE)
+```
+```{r}
+cv.ridge <- cv.glmnet(x, y, alpha = 0)
+plot(cv.ridge)
+```
+
+## 分为测试集和训练集
+```{r}
+set.seed(1)
+train <- sample(1 : nrow(x), nrow(x) / 2)
+test <- -train
+y.test <- y[test]
+```
+
+$\lambda=4$时的MSE
+```{r}
+ridge.mod <- glmnet(x[train, ], y[train], alpha = 0, lambda = grid, thresh = 1e-12)
+# 测试集上预测值
+ridge.pred <- predict(ridge.mod, s = 4, newx = x[test, ])
+mean((ridge.pred - y.test) ^ 2)
+```
+
+只含截距项时MSE，可通过设置很大的$\lambda$求得：
+```{r}
+ridge.pred <- predict(ridge.mod, s = 1e10, newx = x[test, ])
+mean((ridge.pred - y.test) ^ 2)
+```
+
+也可：如果只含截距项，模型对测试集的预测就为训练集数据的均值，则MSE：
+```{r}
+mean((mean(y[train]) - y.test) ^ 2)
+```
+
+可以看到和上面结果是一样的。
+
+### 和最小二乘相比
+最小二乘估计就是$\lambda=0$时的岭回归。
+```{r}
+ridge.pred <- predict(ridge.mod, s = 0, newx = x[test, ])
+mean((ridge.pred - y.test) ^ 2)
+```
+
+还是比$\lambda=4$时的MSE大。
+```{r}
+lm(y ~ x, subset = train)
+predict(ridge.mod, s = 0, type = 'coefficients')[1 : 20,]
+```
+
+可以看到两者得到的参数估计一致的。
+
+### 使用交叉验证得到最佳 $\lambda$
+函数`cv.glmnet()`可用来选择参数，默认十折交叉验证：
+```{r}
+set.seed(1)
+cv.out <- cv.glmnet(x[train, ], y[train], alpha = 0)
+plot(cv.out)
+```
+
+```{r}
+bestlam <- cv.out$lambda.min
+bestlam
+```
+
+看看最佳的$\lambda$对应的MSE是多少：
+```{r}
+ridge.pred <- predict(ridge.mod, s = bestlam, newx = x[test, ])
+mean((ridge.pred - y.test) ^ 2)
+```
+
+基于整个数据集对应的参数估计：
+```{r}
+out <- glmnet(x, y, alpha = 0)
+predict(out, s = bestlam, type = 'coefficients')[1 : 20,]
+```
+
+可以看到没有变量的系数为0.
+
+## lasso
+只需将$\lambda$设定为1.
+```{r}
+lasso.mod <- glmnet(x[train, ], y[train], alpha = 1, lambda = grid)
+plot(lasso.mod)
+```
+
+可以看到有些系数变为了0.
+### 进行交叉验证
+```{r}
+set.seed(1)
+cv.out <- cv.glmnet(x[train, ], y[train], alpha = 1)
+plot(cv.out)
+```
+
+```{r}
+bestlam <- cv.out$lambda.min
+bestlam
+```
+
+对应的MSE
+```{r}
+lasso.pred <- predict(lasso.mod, s = bestlam, newx = x[test,])
+mean((lasso.pred - y.test) ^ 2)
+```
+
+该值小于最小二乘估计所得到的MSE，与岭回归交叉验证得到的很接近。但可以得到模型的系数估计中，值保留了7个变量：
+```{r}
+out <- glmnet(x, y, alpha = 1)
+lasso.coef <- predict(out, alpha = 1, type = 'coefficients', s = bestlam)[1 : 20,]
+lasso.coef
+```
+
+```{r}
+lasso.coef[lasso.coef != 0]
+```
+
+保留了7个变量。
+
+# 主成分回归
+可使用pls库中的`pcr()`函数实现主成分回归。
+```{r}
+library(pls)
+```
+
+```{r}
+set.seed(2)
+# 拟合前标化并使用十折交叉验证
+pcr.mod <- pcr(Salary ~ ., data = Hitters, scale = TRUE, validation = 'CV')
+summary(pcr.mod)
+```
+
+RMSEP是均方根误差，MSE是其平方。
+TRAINING部分是指能提取的响应变量的方差（信息量）。
+
+```{r}
+validationplot(pcr.mod, val.type = 'MSEP')
+```
+
+
+
+## 划分训练测试集
+```{r}
+set.seed(1)
+pcr.mod <- pcr(Salary ~ ., data = Hitters, subset = train, scale = TRUE, validation = 'CV')
+validationplot(pcr.mod, val.type = 'MSEP')
+```
+
+```{r}
+summary(pcr.mod)
+```
+
+可以看到7个主成分时误差最小，计算测试集误差
+```{r}
+pcr.pred <- predict(pcr.mod, x[test, ], ncomp = 7)
+mean((pcr.pred - y.test) ^ 2)
+```
+
+最后，在整个数据集上用7个主成分拟合：
+```{r}
+pcr.mod <- pcr(y ~ x, scale = TRUE, ncomp = 7)
+summary(pcr.mod)
+```
+
+## 偏最小二乘估计
+函数`plsr()`可以拟合最小二乘回归模型
+```{r}
+set.seed(1)
+pls.fit <- plsr(Salary ~ ., data = Hitters, subset = train, scale = TRUE, validation = 'CV')
+summary(pls.fit)
+```
+
+当M=2个偏最小二乘方向时，交叉验证误差最小。计算相应的测试集MSE
+```{r}
+pls.pred <- predict(pls.fit, x[test, ], ncomp = 2)
+mean((pls.pred - y.test) ^ 2)
+```
+
+在整个数据集中：
+```{r}
+pls.fit <- plsr(Salary ~ ., data = Hitters, scale = TRUE, ncomp = 2)
+summary(pls.fit)
+```
+
+两个PLS成分解释的变量Salary的方差百分比为46.4%，与选择的7个成分的PCR解释的46.69%基本相当。因为PCR旨在寻找一个可以解释预测变量方差最大化，而PLS旨在寻找一个可以同时解释预测变量和响应变量方差的方向。
+```{r}
+names(pls.fit)
+coef(pls.fit)
 ```
 
