@@ -1,0 +1,11 @@
+---
+title: "Week 2"
+output: html_notebook
+---
+
+Hypothesis: $h_\theta(x)=\theta_0+\theta_1x_1+\theta_2x_2+...+\theta_nx_n$
+
+$x=\begin{bmatrix}x_0\\x_1\\x_2\\\vdots\\x_n \end{bmatrix}\in R^{n+1},\,$
+$\theta=\begin{bmatrix}\theta_0\\\theta_1\\\theta_2\\\vdots\\\theta_n \end{bmatrix}\in R^{n+1}$
+
+$h_\theta(x)=\begin{bmatrix}\theta_0&\theta_1&\theta_2&\vdots&\theta_n \end{bmatrix}\begin{bmatrix}x_0\\x_1\\x_2\\\vdots\\x_n \end{bmatrix}=\theta^Tx$

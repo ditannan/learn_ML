@@ -1,0 +1,17 @@
+---
+title: "Week 3"
+output: html_notebook
+---
+
+# sigmoid function
+$y=\frac{1}{1+e^{-x}}$
+```{r}
+x <- seq(-10, 10, by = 0.05)
+y <- 1 / (1 + exp(-x))
+plot(x, y)
+```
+
+```{r}
+y
+```
+
