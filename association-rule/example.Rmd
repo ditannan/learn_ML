@@ -1,0 +1,40 @@
+---
+title: "Learn Association Rules"
+output: html_notebook
+---
+
+# loading packages
+```{r message=FALSE, warning=FALSE}
+library(arules)
+```
+
+# read
+```{r}
+data("Adult")
+Adult
+```
+
+```{r}
+inspect(Adult[1 : 3])
+```
+
+
+```{r}
+itemFrequency(Adult[, 1 : 3])
+```
+
+
+```{r}
+rules <- apriori(Adult, parameter = list(supp = 0.5, conf = 0.9, target = "rules"))
+```
+
+# Show basic statistics
+```{r}
+summary(rules)
+```
+
+# Inspect rules with the highest lift
+```{r}
+inspect(head(rules, by = "lift"))
+```
+
